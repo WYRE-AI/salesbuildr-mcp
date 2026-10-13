@@ -71,16 +71,38 @@ reads the token from `NODE_AUTH_TOKEN`, so no further config is needed.
 
 ## Configuration
 
+Copy [`.env.example`](.env.example). Stdio and `AUTH_MODE=env` read the SalesBuildr variables. Gateway mode does not.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SALESBUILDR_API_KEY` | Yes (env mode) | - | Your SalesBuildr API key |
+| `SALESBUILDR_API_KEY` | For stdio and `AUTH_MODE=env` | - | SalesBuildr API key |
 | `SALESBUILDR_BASE_URL` | No | Library default | Tenant-specific base URL (e.g. `https://mytenant.salesbuildr.com`) |
-| `MCP_TRANSPORT` | No | `stdio` | Transport type: `stdio` or `http` |
+| `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
 | `MCP_HTTP_PORT` | No | `8080` | HTTP server port |
-| `MCP_HTTP_HOST` | No | `0.0.0.0` | HTTP server host |
-| `AUTH_MODE` | No | `env` | Authentication mode: `env` or `gateway` |
+| `MCP_HTTP_HOST` | No | `0.0.0.0` when a real secret is set | Bind address when `CONDUIT_S2S_SECRET` is set. The container image sets `0.0.0.0`. Without a secret, `MCP_ALLOW_INSECURE_DEV=1` binds `127.0.0.1` instead. |
+| `AUTH_MODE` | No | `env` outside the image | `env` or `gateway`. The container image and Compose default to `gateway`. Gateway mode requires `X-SalesBuildr-API-Key` on each `/mcp` request and never falls back to `SALESBUILDR_*`. |
+| `CONDUIT_S2S_SECRET` | Yes for HTTP | - | Service-to-service secret. The HTTP server logs an error and exits non-zero when this is empty or a known placeholder. Compose will not start without it. Never commit a real value. Generate one with `openssl rand -hex 32`. |
+| `MCP_ALLOW_INSECURE_DEV` | No | unset | Set to `1` only for local development to start HTTP without `CONDUIT_S2S_SECRET`. The process logs a warning, does not enforce `X-Gateway-S2S`, and binds `127.0.0.1` only. A non-loopback `MCP_HTTP_HOST` refuses startup. A known placeholder secret is still refused. |
+
+`/health` and `/healthz` stay unauthenticated and do not read credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
+
+### HTTP authentication
+
+With `MCP_TRANSPORT=http` and `CONDUIT_S2S_SECRET` set, every `/mcp` request must include `X-Gateway-S2S`. The value is `t=<unix seconds>,v1=<hex>`, where `v1` is HMAC-SHA256 of the exact string `t=<unix seconds>` keyed by `CONDUIT_S2S_SECRET` (64 lowercase hex characters). The timestamp must be within 300 seconds of the server clock. A missing or invalid header returns 401. The secret is never written to logs.
+
+```js
+import { createHmac } from "node:crypto";
+
+const t = Math.floor(Date.now() / 1000);
+const v1 = createHmac("sha256", process.env.CONDUIT_S2S_SECRET)
+  .update(`t=${t}`)
+  .digest("hex");
+const xGatewayS2s = `t=${t},v1=${v1}`;
+```
+
+In `AUTH_MODE=gateway`, `/mcp` also requires `X-SalesBuildr-API-Key`. That header is the only credential source for the request. A request missing it returns 401 and does not read `SALESBUILDR_API_KEY` from the environment.
 
 ### Stdio Mode (Claude Desktop)
 
@@ -103,22 +125,48 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 ### HTTP Mode (Gateway)
 
 ```bash
-MCP_TRANSPORT=http AUTH_MODE=gateway node dist/index.js
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" MCP_TRANSPORT=http AUTH_MODE=gateway node dist/index.js
 ```
 
-In gateway mode, pass credentials via request headers:
+In gateway mode, pass credentials via request headers. The gateway also signs each request with `X-Gateway-S2S` (see [HTTP authentication](#http-authentication)):
 
 ```
-X-Salesbuildr-API-Key: your-api-key
+X-Gateway-S2S: t=<unix seconds>,v1=<hex hmac-sha256>
+X-SalesBuildr-API-Key: your-api-key
 ```
 
 ### Docker
 
+The image listens on `0.0.0.0` inside the container (`MCP_HTTP_HOST`) and defaults to `AUTH_MODE=gateway`. Publish the port on loopback and pass a real S2S secret. In gateway mode, the SalesBuildr API key arrives on each request as `X-SalesBuildr-API-Key`; it is not read from the environment.
+
 ```bash
 docker run -d \
-  -p 8080:8080 \
-  -e SALESBUILDR_API_KEY=your-api-key \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+  -p 127.0.0.1:8080:8080 \
   ghcr.io/wyre-ai/salesbuildr-mcp:latest
+```
+
+Compose refuses to start when `CONDUIT_S2S_SECRET` is unset, sets `AUTH_MODE=gateway`, does not set `SALESBUILDR_API_KEY` or `env_file`, and publishes `127.0.0.1:8080:8080`:
+
+```bash
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" docker compose up
+```
+
+Single-tenant HTTP (`AUTH_MODE=env`) still requires the S2S secret, then uses `SALESBUILDR_API_KEY`:
+
+```bash
+docker run -d \
+  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
+  -e AUTH_MODE=env \
+  -e SALESBUILDR_API_KEY=your-api-key \
+  -p 127.0.0.1:8080:8080 \
+  ghcr.io/wyre-ai/salesbuildr-mcp:latest
+```
+
+Local HTTP without a secret is development-only. It binds `127.0.0.1` and logs a warning. A non-loopback `MCP_HTTP_HOST` makes startup exit:
+
+```bash
+MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
 ```
 
 ## Development
@@ -139,8 +187,11 @@ npm run build
 # Run locally (stdio)
 SALESBUILDR_API_KEY=your-key npm start
 
-# Run locally (HTTP)
-MCP_TRANSPORT=http SALESBUILDR_API_KEY=your-key npm start
+# Run locally (HTTP). Refuses to start until CONDUIT_S2S_SECRET is a real secret.
+CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" MCP_TRANSPORT=http SALESBUILDR_API_KEY=your-key npm start
+
+# Local HTTP only, without a service-to-service secret (always binds 127.0.0.1)
+MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
 ```
 
 ## License

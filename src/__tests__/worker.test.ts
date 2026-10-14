@@ -96,7 +96,25 @@ describe("Cloudflare Worker entrypoint", () => {
         method: "tools/call",
         params: { name: "salesbuildr_companies_list", arguments: {} },
       },
-      { AUTH_MODE: "gateway" }
+      { AUTH_MODE: "gateway", SALESBUILDR_API_KEY: "env-key-must-not-be-used" }
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { message?: string };
+    expect(body.message).toContain("X-SalesBuildr-API-Key");
+    expect(body.message).not.toContain("SALESBUILDR_API_KEY");
+    expect(JSON.stringify(body)).not.toContain("env-key-must-not-be-used");
+  });
+
+  it("rejects a whitespace-only gateway credential header", async () => {
+    const res = await mcp(
+      {
+        jsonrpc: "2.0",
+        id: 5,
+        method: "tools/list",
+        params: {},
+      },
+      { AUTH_MODE: "gateway" },
+      { "x-salesbuildr-api-key": "   " }
     );
     expect(res.status).toBe(401);
   });

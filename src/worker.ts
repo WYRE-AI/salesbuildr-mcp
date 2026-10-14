@@ -9,7 +9,7 @@
  *
  * Credentials are resolved per request, in order:
  * 1. Gateway header (when AUTH_MODE=gateway):
- *    - X-SalesBuildr-API-Key
+ *    - X-SalesBuildr-API-Key (required; blank values are rejected; no env fallback)
  * 2. Worker secrets / vars (env mode):
  *    - SALESBUILDR_API_KEY
  *    - SALESBUILDR_BASE_URL (optional)
@@ -101,13 +101,12 @@ export default {
       const isGatewayMode = (env.AUTH_MODE ?? "env") === "gateway";
 
       if (isGatewayMode) {
-        const apiKey = request.headers.get("x-salesbuildr-api-key") ?? undefined;
+        const apiKey = request.headers.get("x-salesbuildr-api-key")?.trim() || undefined;
         if (!apiKey) {
           return json(
             {
               error: "Missing credentials",
-              message:
-                "Missing credentials: X-SalesBuildr-API-Key (or SALESBUILDR_API_KEY)",
+              message: "Missing credentials: X-SalesBuildr-API-Key",
               required: ["X-SalesBuildr-API-Key"],
             },
             401

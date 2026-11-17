@@ -11,7 +11,7 @@ describe("isSalesbuildrHost", () => {
     expect(isSalesbuildrHost("portal.salesbuildr.com")).toBe(true);
     expect(isSalesbuildrHost("acme.salesbuildr.com")).toBe(true);
     expect(isSalesbuildrHost("ACME.SalesBuildr.com.")).toBe(true);
-    expect(isSalesbuildrHost("salesbuildr.com")).toBe(true);
+    expect(isSalesbuildrHost("salesbuildr.com")).toBe(false);
   });
 
   it("rejects lookalikes and empty labels", () => {
@@ -64,6 +64,9 @@ describe("normalizeSalesbuildrApiBase", () => {
     expect(() => normalizeSalesbuildrApiBase("https://evil.com")).toThrow(
       /must be a https:\/\/\*\.salesbuildr\.com host/
     );
+    expect(() =>
+      normalizeSalesbuildrApiBase("https://salesbuildr.com")
+    ).toThrow(/must be a https:\/\/\*\.salesbuildr\.com host/);
     expect(() =>
       normalizeSalesbuildrApiBase("https://salesbuildr.com.evil.com")
     ).toThrow(/must be a https:\/\/\*\.salesbuildr\.com host/);

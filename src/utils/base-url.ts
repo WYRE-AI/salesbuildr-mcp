@@ -22,7 +22,7 @@ export class InvalidSalesbuildrBaseUrlError extends Error {
 
 export function isSalesbuildrHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/\.$/, "");
-  if (host === "salesbuildr.com") return true;
+  // *.salesbuildr.com only (portal and tenant hosts). The apex is not a tenant.
   return host.endsWith(HOST_SUFFIX) && host.length > HOST_SUFFIX.length;
 }
 

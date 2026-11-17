@@ -118,4 +118,25 @@ describe("Cloudflare Worker entrypoint", () => {
     );
     expect(res.status).toBe(401);
   });
+
+  it("rejects an empty or whitespace-only X-SalesBuildr-Base-URL in gateway mode", async () => {
+    for (const value of ["", "   "]) {
+      const res = await mcp(
+        {
+          jsonrpc: "2.0",
+          id: 6,
+          method: "tools/list",
+          params: {},
+        },
+        { AUTH_MODE: "gateway" },
+        {
+          "x-salesbuildr-api-key": "header-api-key",
+          "x-salesbuildr-base-url": value,
+        }
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error?: string };
+      expect(body.error).toBe("Invalid X-SalesBuildr-Base-URL");
+    }
+  });
 });

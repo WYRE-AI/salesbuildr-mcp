@@ -332,6 +332,87 @@ describe("HTTP /mcp authentication", () => {
     assertNoSecrets(errors.join("\n"));
   });
 
+  it("forwards a valid X-SalesBuildr-Base-URL after S2S verification and ignores SALESBUILDR_BASE_URL", async () => {
+    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.AUTH_MODE = "gateway";
+    process.env.MCP_HTTP_HOST = "127.0.0.1";
+    silenceLogs();
+    const runSpy = vi.spyOn(credentialStore, "run");
+    const { port } = await listen();
+
+    const response = await postMcp(port, {
+      "x-gateway-s2s": mintS2sHeader(S2S_SECRET),
+      "x-salesbuildr-api-key": HEADER_API_KEY,
+      "x-salesbuildr-base-url": "acme",
+    });
+
+    expect(response.status).toBe(200);
+    expect(runSpy).toHaveBeenCalledWith(
+      { apiKey: HEADER_API_KEY, baseUrl: "https://acme.salesbuildr.com/public-api" },
+      expect.any(Function)
+    );
+  });
+
+  it("returns 400 for an empty or whitespace-only X-SalesBuildr-Base-URL and does not fall back to portal", async () => {
+    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.AUTH_MODE = "gateway";
+    process.env.MCP_HTTP_HOST = "127.0.0.1";
+    silenceLogs();
+    const runSpy = vi.spyOn(credentialStore, "run");
+    const { port } = await listen();
+
+    for (const value of ["", "   "]) {
+      runSpy.mockClear();
+      const response = await postMcp(port, {
+        "x-gateway-s2s": mintS2sHeader(S2S_SECRET),
+        "x-salesbuildr-api-key": HEADER_API_KEY,
+        "x-salesbuildr-base-url": value,
+      });
+      const body = (await response.json()) as { error: string };
+      expect(response.status).toBe(400);
+      expect(body.error).toBe("Invalid X-SalesBuildr-Base-URL");
+      expect(runSpy).not.toHaveBeenCalled();
+    }
+  });
+
+  it("returns 400 for an off-allowlist X-SalesBuildr-Base-URL and does not run with env credentials", async () => {
+    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.AUTH_MODE = "gateway";
+    process.env.MCP_HTTP_HOST = "127.0.0.1";
+    silenceLogs();
+    const runSpy = vi.spyOn(credentialStore, "run");
+    const { port } = await listen();
+
+    const response = await postMcp(port, {
+      "x-gateway-s2s": mintS2sHeader(S2S_SECRET),
+      "x-salesbuildr-api-key": HEADER_API_KEY,
+      "x-salesbuildr-base-url": "https://evil.example",
+    });
+    const body = (await response.json()) as { error: string; message: string };
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe("Invalid X-SalesBuildr-Base-URL");
+    expect(body.message).toMatch(/salesbuildr\.com/);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not read X-SalesBuildr-Base-URL when S2S verification fails", async () => {
+    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.AUTH_MODE = "gateway";
+    process.env.MCP_HTTP_HOST = "127.0.0.1";
+    silenceLogs();
+    const runSpy = vi.spyOn(credentialStore, "run");
+    const { port } = await listen();
+
+    const response = await postMcp(port, {
+      "x-salesbuildr-api-key": HEADER_API_KEY,
+      "x-salesbuildr-base-url": "acme",
+    });
+
+    expect(response.status).toBe(401);
+    expect(runSpy).not.toHaveBeenCalled();
+  });
+
   it("serves /health and /healthz without authentication and without reading credentials", async () => {
     process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
     process.env.AUTH_MODE = "gateway";

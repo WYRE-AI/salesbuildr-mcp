@@ -10,6 +10,7 @@
  * Credentials are resolved per request, in order:
  * 1. Gateway header (when AUTH_MODE=gateway):
  *    - X-SalesBuildr-API-Key (required; blank values are rejected; no env fallback)
+ *    - X-SalesBuildr-Base-URL (optional; https://*.salesbuildr.com only)
  * 2. Worker secrets / vars (env mode):
  *    - SALESBUILDR_API_KEY
  *    - SALESBUILDR_BASE_URL (optional)
@@ -31,6 +32,10 @@ import {
   credentialStore,
   type RequestCredentials,
 } from "./utils/credential-store.js";
+import {
+  InvalidSalesbuildrBaseUrlError,
+  optionalSalesbuildrApiBase,
+} from "./utils/base-url.js";
 
 export interface Env {
   SALESBUILDR_API_KEY?: string;
@@ -43,7 +48,7 @@ const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Accept, Authorization, Mcp-Session-Id, MCP-Protocol-Version, X-SalesBuildr-API-Key",
+    "Content-Type, Accept, Authorization, Mcp-Session-Id, MCP-Protocol-Version, X-SalesBuildr-API-Key, X-SalesBuildr-Base-URL",
   "Access-Control-Expose-Headers": "Mcp-Session-Id",
 };
 
@@ -112,7 +117,28 @@ export default {
             401
           );
         }
-        const creds: RequestCredentials = { apiKey };
+        let baseUrl: string | undefined;
+        try {
+          // Only an absent header is omitted (library default). A present
+          // empty or whitespace value is rejected rather than falling back
+          // to portal.
+          const rawHeader = request.headers.get("x-salesbuildr-base-url");
+          const rawBase = rawHeader === null ? undefined : rawHeader;
+          baseUrl = optionalSalesbuildrApiBase(rawBase);
+        } catch (err) {
+          const message =
+            err instanceof InvalidSalesbuildrBaseUrlError
+              ? err.message
+              : "Invalid Salesbuildr tenant URL.";
+          return json(
+            { error: "Invalid X-SalesBuildr-Base-URL", message },
+            400
+          );
+        }
+        const creds: RequestCredentials = {
+          apiKey,
+          ...(baseUrl ? { baseUrl } : {}),
+        };
         return credentialStore.run(creds, () => handleMcp(request));
       }
 

@@ -18,7 +18,9 @@
  * Authentication:
  * - env (default outside the image): SALESBUILDR_API_KEY from the environment
  * - gateway: X-SalesBuildr-API-Key on each request. Missing headers are
- *   rejected. There is no SALESBUILDR_* fallback.
+ *   rejected. There is no SALESBUILDR_* fallback. Optional
+ *   X-SalesBuildr-Base-URL is read only after X-Gateway-S2S verifies, and
+ *   only a https://*.salesbuildr.com host is accepted.
  *
  * HTTP transport refuses to start unless CONDUIT_S2S_SECRET is a real secret.
  * A known placeholder is never accepted. MCP_ALLOW_INSECURE_DEV=1 is a
@@ -34,6 +36,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createMcpServer } from "./mcp-server.js";
 import { credentialStore } from "./utils/credential-store.js";
 import { verifyS2sHeader, S2S_HEADER } from "./s2s-verify.js";
+import {
+  InvalidSalesbuildrBaseUrlError,
+  optionalSalesbuildrApiBase,
+} from "./utils/base-url.js";
 
 /**
  * Public example values. A copied placeholder must not verify as a real
@@ -96,6 +102,12 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   if (typeof raw !== "string") return undefined;
   const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/** Present header text, including empty or whitespace-only. Absent → undefined. */
+function rawHeaderValue(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === "string" ? raw : undefined;
 }
 
 /** 127.0.0.0/8, localhost, and ::1. Bracketed IPv6 forms count too. */
@@ -240,7 +252,34 @@ export async function startHttpTransport(): Promise<HttpServer> {
             res.end(JSON.stringify(GATEWAY_CREDENTIALS_UNAUTHORIZED));
             return;
           }
-          credentialStore.run({ apiKey }, handleMcp);
+          // Base URL is optional. It is read only after S2S verification
+          // above. An omitted header leaves the client on the library
+          // default (portal.salesbuildr.com). A present value is
+          // allowlisted to *.salesbuildr.com; a bad value is rejected
+          // rather than falling back to portal (wrong tenant).
+          let baseUrl: string | undefined;
+          try {
+            baseUrl = optionalSalesbuildrApiBase(
+              rawHeaderValue(req.headers["x-salesbuildr-base-url"])
+            );
+          } catch (err) {
+            const message =
+              err instanceof InvalidSalesbuildrBaseUrlError
+                ? err.message
+                : "Invalid Salesbuildr tenant URL.";
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: "Invalid X-SalesBuildr-Base-URL",
+                message,
+              })
+            );
+            return;
+          }
+          credentialStore.run(
+            { apiKey, ...(baseUrl ? { baseUrl } : {}) },
+            handleMcp
+          );
           return;
         }
 

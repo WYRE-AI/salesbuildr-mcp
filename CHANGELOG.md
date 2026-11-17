@@ -35,6 +35,17 @@
 
 ### Added
 
+- **Gateway mode accepts an optional `X-SalesBuildr-Base-URL` header (WYREAI-794).**
+  After `X-Gateway-S2S` verifies, a per-request tenant API base may be supplied
+  as a subdomain (`acme`) or a full `https://acme.salesbuildr.com` /
+  `https://acme.salesbuildr.com/public-api` URL. The host is allowlisted to
+  `*.salesbuildr.com` (https only, no userinfo, port 443 only; the apex is
+  rejected). A missing header leaves the client on the library default
+  (`https://portal.salesbuildr.com/public-api`). A present invalid or blank
+  value returns HTTP 400 and does not fall back to portal. Gateway mode still
+  never reads `SALESBUILDR_BASE_URL` from the environment. The Worker CORS
+  allow-list also includes `X-SalesBuildr-Base-URL`.
+
 - **Interactive quote card via MCP Apps (SEP-1865).** `salesbuildr_quotes_get` results now
   render as an interactive, read-only card in MCP Apps hosts (Claude Desktop/web, and other
   hosts advertising the `io.modelcontextprotocol/ui` extension) — quote title, status,

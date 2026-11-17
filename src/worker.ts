@@ -119,8 +119,11 @@ export default {
         }
         let baseUrl: string | undefined;
         try {
-          const rawBase =
-            request.headers.get("x-salesbuildr-base-url")?.trim() || undefined;
+          // Only an absent header is omitted (library default). A present
+          // empty or whitespace value is rejected rather than falling back
+          // to portal.
+          const rawHeader = request.headers.get("x-salesbuildr-base-url");
+          const rawBase = rawHeader === null ? undefined : rawHeader;
           baseUrl = optionalSalesbuildrApiBase(rawBase);
         } catch (err) {
           const message =

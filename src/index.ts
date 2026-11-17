@@ -104,6 +104,12 @@ function headerValue(value: string | string[] | undefined): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+/** Present header text, including empty or whitespace-only. Absent → undefined. */
+function rawHeaderValue(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === "string" ? raw : undefined;
+}
+
 /** 127.0.0.0/8, localhost, and ::1. Bracketed IPv6 forms count too. */
 function isLoopbackHost(host: string): boolean {
   const normalized = host.trim().toLowerCase().replace(/^\[|\]$/g, "");
@@ -254,7 +260,7 @@ export async function startHttpTransport(): Promise<HttpServer> {
           let baseUrl: string | undefined;
           try {
             baseUrl = optionalSalesbuildrApiBase(
-              headerValue(req.headers["x-salesbuildr-base-url"])
+              rawHeaderValue(req.headers["x-salesbuildr-base-url"])
             );
           } catch (err) {
             const message =

@@ -353,6 +353,28 @@ describe("HTTP /mcp authentication", () => {
     );
   });
 
+  it("returns 400 for an empty or whitespace-only X-SalesBuildr-Base-URL and does not fall back to portal", async () => {
+    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.AUTH_MODE = "gateway";
+    process.env.MCP_HTTP_HOST = "127.0.0.1";
+    silenceLogs();
+    const runSpy = vi.spyOn(credentialStore, "run");
+    const { port } = await listen();
+
+    for (const value of ["", "   "]) {
+      runSpy.mockClear();
+      const response = await postMcp(port, {
+        "x-gateway-s2s": mintS2sHeader(S2S_SECRET),
+        "x-salesbuildr-api-key": HEADER_API_KEY,
+        "x-salesbuildr-base-url": value,
+      });
+      const body = (await response.json()) as { error: string };
+      expect(response.status).toBe(400);
+      expect(body.error).toBe("Invalid X-SalesBuildr-Base-URL");
+      expect(runSpy).not.toHaveBeenCalled();
+    }
+  });
+
   it("returns 400 for an off-allowlist X-SalesBuildr-Base-URL and does not run with env credentials", async () => {
     process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
     process.env.AUTH_MODE = "gateway";

@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+### Added
+
+- **EU SalesBuildr hosts on the base-URL allowlist.** Gateway
+  `X-SalesBuildr-Base-URL` (and the same normalizer used elsewhere) now
+  accepts `https://*.eu1-salesbuildr.com` in addition to
+  `https://*.salesbuildr.com`. A bare host or full https URL works for EU
+  tenants (e.g. `wilroffreitsma.eu1-salesbuildr.com`); a bare single label
+  like `acme` still maps to `https://acme.salesbuildr.com`. Apex hosts and
+  SSRF lookalikes (`eu1-salesbuildr.com.evil.com`,
+  `evileu1-salesbuildr.com`) remain rejected.
+
 ### Security
 
 - **Fixed a cross-tenant credential leak in gateway mode.** `getClient()` in

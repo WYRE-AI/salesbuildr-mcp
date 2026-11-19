@@ -1,16 +1,19 @@
 /**
  * SalesBuildr API hosts are tenant-specific
- * (`https://<tenant>.salesbuildr.com/public-api`). The library default is
- * portal.salesbuildr.com. In gateway mode the tenant base URL arrives on
- * X-SalesBuildr-Base-URL and must be allowlisted before it is passed to the
- * client — a request that already passed S2S verification is still not
- * allowed to aim the sidecar at an arbitrary host.
+ * (`https://<tenant>.salesbuildr.com/public-api` or
+ * `https://<tenant>.eu1-salesbuildr.com/public-api` for EU). The library
+ * default is portal.salesbuildr.com. In gateway mode the tenant base URL
+ * arrives on X-SalesBuildr-Base-URL and must be allowlisted before it is
+ * passed to the client — a request that already passed S2S verification is
+ * still not allowed to aim the sidecar at an arbitrary host.
  */
 
 export const DEFAULT_SALESBUILDR_API_BASE =
   "https://portal.salesbuildr.com/public-api";
 
-const HOST_SUFFIX = ".salesbuildr.com";
+/** Allowed host suffixes. Apex of either (no subdomain) is rejected. */
+const HOST_SUFFIXES = [".salesbuildr.com", ".eu1-salesbuildr.com"] as const;
+
 const SAFE_SUBDOMAIN_LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
 
 export class InvalidSalesbuildrBaseUrlError extends Error {
@@ -22,15 +25,21 @@ export class InvalidSalesbuildrBaseUrlError extends Error {
 
 export function isSalesbuildrHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/\.$/, "");
-  // *.salesbuildr.com only (portal and tenant hosts). The apex is not a tenant.
-  return host.endsWith(HOST_SUFFIX) && host.length > HOST_SUFFIX.length;
+  // *.salesbuildr.com or *.eu1-salesbuildr.com (portal and tenant hosts).
+  // The apex of either suffix is not a tenant. Suffix match rejects
+  // lookalikes such as eu1-salesbuildr.com.evil.com and
+  // evileu1-salesbuildr.com (no leading '.' before the allowed suffix).
+  return HOST_SUFFIXES.some(
+    (suffix) => host.endsWith(suffix) && host.length > suffix.length
+  );
 }
 
 /**
  * Canonicalize a tenant subdomain or URL to `https://<host>/public-api`.
- * Accepts a single DNS label (`acme`), a host (`acme.salesbuildr.com`), or a
- * full https URL (with or without `/public-api`). Rejects anything whose host
- * is not `*.salesbuildr.com`.
+ * Accepts a single DNS label (`acme` → `https://acme.salesbuildr.com`), a
+ * host (`acme.salesbuildr.com` or `acme.eu1-salesbuildr.com`), or a full
+ * https URL (with or without `/public-api`). Rejects anything whose host
+ * is not `*.salesbuildr.com` or `*.eu1-salesbuildr.com`.
  */
 export function normalizeSalesbuildrApiBase(raw: string): string {
   const trimmed = raw.trim();
@@ -73,7 +82,7 @@ export function normalizeSalesbuildrApiBase(raw: string): string {
   const host = url.hostname.toLowerCase().replace(/\.$/, "");
   if (!isSalesbuildrHost(host)) {
     throw new InvalidSalesbuildrBaseUrlError(
-      "Salesbuildr tenant URL must be a https://*.salesbuildr.com host."
+      "Salesbuildr tenant URL must be a https://*.salesbuildr.com or https://*.eu1-salesbuildr.com host."
     );
   }
 

@@ -10,7 +10,8 @@
  * Credentials are resolved per request, in order:
  * 1. Gateway header (when AUTH_MODE=gateway):
  *    - X-SalesBuildr-API-Key (required; blank values are rejected; no env fallback)
- *    - X-SalesBuildr-Base-URL (optional; https://*.salesbuildr.com only)
+ *    - X-SalesBuildr-Base-URL (optional; https://*.salesbuildr.com or
+ *      https://*.eu1-salesbuildr.com only)
  * 2. Worker secrets / vars (env mode):
  *    - SALESBUILDR_API_KEY
  *    - SALESBUILDR_BASE_URL (optional)

@@ -20,7 +20,8 @@
  * - gateway: X-SalesBuildr-API-Key on each request. Missing headers are
  *   rejected. There is no SALESBUILDR_* fallback. Optional
  *   X-SalesBuildr-Base-URL is read only after X-Gateway-S2S verifies, and
- *   only a https://*.salesbuildr.com host is accepted.
+ *   only a https://*.salesbuildr.com or https://*.eu1-salesbuildr.com host
+ *   is accepted.
  *
  * HTTP transport refuses to start unless CONDUIT_S2S_SECRET is a real secret.
  * A known placeholder is never accepted. MCP_ALLOW_INSECURE_DEV=1 is a
@@ -255,8 +256,9 @@ export async function startHttpTransport(): Promise<HttpServer> {
           // Base URL is optional. It is read only after S2S verification
           // above. An omitted header leaves the client on the library
           // default (portal.salesbuildr.com). A present value is
-          // allowlisted to *.salesbuildr.com; a bad value is rejected
-          // rather than falling back to portal (wrong tenant).
+          // allowlisted to *.salesbuildr.com or *.eu1-salesbuildr.com; a
+          // bad value is rejected rather than falling back to portal
+          // (wrong tenant).
           let baseUrl: string | undefined;
           try {
             baseUrl = optionalSalesbuildrApiBase(

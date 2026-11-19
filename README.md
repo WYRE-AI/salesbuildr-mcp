@@ -82,7 +82,7 @@ Copy [`.env.example`](.env.example). Stdio and `AUTH_MODE=env` read the SalesBui
 | `MCP_TRANSPORT` | No | `stdio` | `stdio` or `http` |
 | `MCP_HTTP_PORT` | No | `8080` | HTTP server port |
 | `MCP_HTTP_HOST` | No | `0.0.0.0` when a real secret is set | Bind address when `CONDUIT_S2S_SECRET` is set. The container image sets `0.0.0.0`. Without a secret, `MCP_ALLOW_INSECURE_DEV=1` binds `127.0.0.1` instead. |
-| `AUTH_MODE` | No | `env` outside the image | `env` or `gateway`. The container image and Compose default to `gateway`. Gateway mode requires `X-SalesBuildr-API-Key` on each `/mcp` request and never falls back to `SALESBUILDR_*`. Optional `X-SalesBuildr-Base-URL` is accepted only after S2S verification, and only for a `https://*.salesbuildr.com` host. |
+| `AUTH_MODE` | No | `env` outside the image | `env` or `gateway`. The container image and Compose default to `gateway`. Gateway mode requires `X-SalesBuildr-API-Key` on each `/mcp` request and never falls back to `SALESBUILDR_*`. Optional `X-SalesBuildr-Base-URL` is accepted only after S2S verification, and only for a `https://*.salesbuildr.com` or `https://*.eu1-salesbuildr.com` host. |
 | `CONDUIT_S2S_SECRET` | Yes for HTTP | - | Service-to-service secret. The HTTP server logs an error and exits non-zero when this is empty or a known placeholder. Compose will not start without it. Never commit a real value. Generate one with `openssl rand -hex 32`. |
 | `MCP_ALLOW_INSECURE_DEV` | No | unset | Set to `1` only for local development to start HTTP without `CONDUIT_S2S_SECRET`. The process logs a warning, does not enforce `X-Gateway-S2S`, and binds `127.0.0.1` only. A non-loopback `MCP_HTTP_HOST` refuses startup. A known placeholder secret is still refused. |
 
@@ -102,7 +102,7 @@ const v1 = createHmac("sha256", process.env.CONDUIT_S2S_SECRET)
 const xGatewayS2s = `t=${t},v1=${v1}`;
 ```
 
-In `AUTH_MODE=gateway`, `/mcp` also requires `X-SalesBuildr-API-Key`. That header is the only API-key source for the request. A request missing it returns 401 and does not read `SALESBUILDR_API_KEY` from the environment. After S2S verification, an optional `X-SalesBuildr-Base-URL` may supply the tenant API base (`acme`, `https://acme.salesbuildr.com`, or `https://acme.salesbuildr.com/public-api`). The host must be `*.salesbuildr.com`; a bad value returns 400 and does not fall back to portal. Omitting the header leaves the client on the library default (`https://portal.salesbuildr.com/public-api`). Gateway mode never reads `SALESBUILDR_BASE_URL` from the environment.
+In `AUTH_MODE=gateway`, `/mcp` also requires `X-SalesBuildr-API-Key`. That header is the only API-key source for the request. A request missing it returns 401 and does not read `SALESBUILDR_API_KEY` from the environment. After S2S verification, an optional `X-SalesBuildr-Base-URL` may supply the tenant API base (`acme`, `https://acme.salesbuildr.com`, `https://acme.eu1-salesbuildr.com`, or the same with `/public-api`). The host must be `*.salesbuildr.com` or `*.eu1-salesbuildr.com`; a bad value returns 400 and does not fall back to portal. Omitting the header leaves the client on the library default (`https://portal.salesbuildr.com/public-api`). Gateway mode never reads `SALESBUILDR_BASE_URL` from the environment.
 
 ### Stdio Mode (Claude Desktop)
 
